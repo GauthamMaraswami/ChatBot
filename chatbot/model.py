@@ -18,8 +18,28 @@ class ProjectionOp:
         self.scope = scope
 
     
+        with tf.variable_scope('weights_' + self.scope):
+            self.W_t = tf.get_variable(
+                'weights',
+                shape,
+                dtype=dtype
+            )
+            self.b = tf.get_variable(
+                'bias',
+                shape[0],
+                initializer=tf.constant_initializer(),
+                dtype=dtype
+            )
+            self.W = tf.transpose(self.W_t)
 
+    def getWeights(self):
 
+        return self.W, self.b
+
+    def __call__(self, X):
+
+        with tf.name_scope(self.scope):
+            return tf.matmul(X, self.W) + self.b
 
 
 class Model:
