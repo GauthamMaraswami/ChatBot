@@ -44,5 +44,48 @@ class TextData:
 
         return list(TextData.availableCorpus.keys())
 
+    def __init__(self, args):
+
+        self.args = args
+
+        self.corpusDir = os.path.join(self.args.rootDir, 'data', self.args.corpus)
+        basePath = self._constructBasePath()
+        self.fullSamplesPath = basePath + '.pkl'  # Full sentences length/vocab
+        self.filteredSamplesPath = basePath + '-length{}-filter{}-vocabSize{}.pkl'.format(
+            self.args.maxLength,
+            self.args.filterVocab,
+            self.args.vocabularySize,
+        ) 
+
+        self.padToken = -1  
+        self.goToken = -1  
+        self.eosToken = -1  
+        self.unknownToken = -1  
+
+        self.trainingSamples = []  
+
+        self.word2id = {}
+        self.id2word = {}  
+        self.idCount = {}  
+        self.loadCorpus()
+
+        self._printStats()
+
+        if self.args.playDataset:
+            self.playDataset()
+
+    def _printStats(self):
+        print('Loaded {}: {} words, {} QA'.format(self.args.corpus, len(self.word2id), len(self.trainingSamples)))
+
+    def _constructBasePath(self):
+        path = os.path.join(self.args.rootDir, 'data' + os.sep + 'samples' + os.sep)
+        path += 'dataset-{}'.format(self.args.corpus)
+        if self.args.datasetTag:
+            path += '-' + self.args.datasetTag
+        return path
+
+    def makeLighter(self, ratioDataset):
+        pass
+
 
 
