@@ -66,6 +66,31 @@ class Model:
 
         self.buildNetwork()
 
+    def buildNetwork(self):
+
+        outputProjection = None
+        if 0 < self.args.softmaxSamples < self.textData.getVocabularySize():
+            outputProjection = ProjectionOp(
+                (self.textData.getVocabularySize(), self.args.hiddenSize),
+                scope='softmax_projection',
+                dtype=self.dtype
+            )
+
+            def sampledSoftmax(labels, inputs):
+                labels = tf.reshape(labels, [-1, 1])  
+                localWt     = tf.cast(outputProjection.W_t,             tf.float32)
+                localB      = tf.cast(outputProjection.b,               tf.float32)
+                localInputs = tf.cast(inputs,                           tf.float32)
+
+                return tf.cast(
+                    tf.nn.sampled_softmax_loss(
+                        localWt,  
+                        localB,
+                        labels,
+                        localInputs,
+                        self.args.softmaxSamples,  
+                        self.textData.getVocabularySize()), 
+                    self.dtype)
 
 
 
