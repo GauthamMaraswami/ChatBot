@@ -92,9 +92,42 @@ class Model:
                         self.textData.getVocabularySize()), 
                     self.dtype)
 
+  
+        def create_rnn_cell():
+            encoDecoCell = tf.contrib.rnn.BasicLSTMCell(  
+                self.args.hiddenSize,
+            )
+            if not self.args.test:  
+                encoDecoCell = tf.contrib.rnn.DropoutWrapper(
+                    encoDecoCell,
+                    input_keep_prob=1.0,
+                    output_keep_prob=self.args.dropout
+                )
+            return encoDecoCell
+        encoDecoCell = tf.contrib.rnn.MultiRNNCell(
+            [create_rnn_cell() for _ in range(self.args.numLayers)],
+        )
 
 
+        with tf.name_scope('placeholder_encoder'):
+            self.encoderInputs  = [tf.placeholder(tf.int32,   [None, ]) for _ in range(self.args.maxLengthEnco)]  
 
+        with tf.name_scope('placeholder_decoder'):
+            self.decoderInputs  = [tf.placeholder(tf.int32,   [None, ], name='inputs') for _ in range(self.args.maxLengthDeco)] 
+            self.decoderTargets = [tf.placeholder(tf.int32,   [None, ], name='targets') for _ in range(self.args.maxLengthDeco)]
+            self.decoderWeights = [tf.placeholder(tf.float32, [None, ], name='weights') for _ in range(self.args.maxLengthDeco)]
+
+        
+        decoderOutputs, states = tf.contrib.legacy_seq2seq.embedding_rnn_seq2seq(
+            self.encoderInputs,  
+            self.decoderInputs,  
+            encoDecoCell,
+            self.textData.getVocabularySize(),
+            self.textData.getVocabularySize(),  
+            embedding_size=self.args.embeddingSize,  
+            output_projection=outputProjection.getWeights() if outputProjection else None,
+            feed_previous=bool(self.args.test)  
+        )
 
 
 
