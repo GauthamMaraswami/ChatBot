@@ -130,6 +130,52 @@ class Model:
         )
 
 
+        if self.args.test:
+            if not outputProjection:
+                self.outputs = decoderOutputs
+            else:
+                self.outputs = [outputProjection(output) for output in decoderOutputs]
 
+           
+        else:
 
-    
+            self.lossFct = tf.contrib.legacy_seq2seq.sequence_loss(
+                decoderOutputs,
+                self.decoderTargets,
+                self.decoderWeights,
+                self.textData.getVocabularySize(),
+                softmax_loss_function= sampledSoftmax if outputProjection else None  
+            )
+            tf.summary.scalar('loss', self.lossFct) 
+
+            opt = tf.train.AdamOptimizer(
+                learning_rate=self.args.learningRate,
+                beta1=0.9,
+                beta2=0.999,
+                epsilon=1e-08
+            )
+            self.optOp = opt.minimize(self.lossFct)
+
+    def step(self, batch):
+
+        feedDict = {}
+        ops = None
+
+        if not self.args.test:  
+            for i in range(self.args.maxLengthEnco):
+                feedDict[self.encoderInputs[i]]  = batch.encoderSeqs[i]
+            for i in range(self.args.maxLengthDeco):
+                feedDict[self.decoderInputs[i]]  = batch.decoderSeqs[i]
+                feedDict[self.decoderTargets[i]] = batch.targetSeqs[i]
+                feedDict[self.decoderWeights[i]] = batch.weights[i]
+
+            ops = (self.optOp, self.lossFct)
+        else: 
+            for i in range(self.args.maxLengthEnco):
+                feedDict[self.encoderInputs[i]]  = batch.encoderSeqs[i]
+            feedDict[self.decoderInputs[0]]  = [self.textData.goToken]
+
+            ops = (self.outputs,)
+
+ 
+        return ops, feedDict
