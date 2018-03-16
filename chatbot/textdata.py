@@ -226,4 +226,83 @@ class TextData:
             self.eosToken = self.word2id['<eos>']
             self.unknownToken = self.word2id['<unknown>']  
 
+    def filterFromFull(self):
+
+        def mergeSentences(sentences, fromEnd=False):
+           
+            merged = []
+
+            if fromEnd:
+                sentences = reversed(sentences)
+
+            for sentence in sentences:
+
+                if len(merged) + len(sentence) <= self.args.maxLength:
+                    if fromEnd: 
+                        merged = sentence + merged
+                    else:
+                        merged = merged + sentence
+                else:  
+                    for w in sentence:
+                        self.idCount[w] -= 1
+            return merged
+
+        newSamples = []
+
+        for inputWords, targetWords in tqdm(self.trainingSamples, desc='Filter sentences:', leave=False):
+            inputWords = mergeSentences(inputWords, fromEnd=True)
+            targetWords = mergeSentences(targetWords, fromEnd=False)
+
+            newSamples.append([inputWords, targetWords])
+        words = []
+
+        specialTokens = { 
+            self.padToken,
+            self.goToken,
+            self.eosToken,
+            self.unknownToken
+        }
+        newMapping = {}  
+        newId = 0
+
+        selectedWordIds = collections \
+            .Counter(self.idCount) \
+            .most_common(self.args.vocabularySize or None)  
+        selectedWordIds = {k for k, v in selectedWordIds if v > self.args.filterVocab}
+        selectedWordIds |= specialTokens
+
+        for wordId, count in [(i, self.idCount[i]) for i in range(len(self.idCount))]:  
+            if wordId in selectedWordIds:  # Update the word id
+                newMapping[wordId] = newId
+                word = self.id2word[wordId]  
+                del self.id2word[wordId]  
+                self.word2id[word] = newId
+                self.id2word[newId] = word
+                newId += 1
+            else: 
+                newMapping[wordId] = self.unknownToken
+                del self.word2id[self.id2word[wordId]]  # The word isn't used anymore
+                del self.id2word[wordId]
+
+        def replace_words(words):
+            valid = False  # Filter empty sequences
+            for i, w in enumerate(words):
+                words[i] = newMapping[w]
+                if words[i] != self.unknownToken:  
+                    valid = True
+            return valid
+
+        self.trainingSamples.clear()
+
+        for inputWords, targetWords in tqdm(newSamples, desc='Replace ids:', leave=False):
+            valid = True
+            valid &= replace_words(inputWords)
+            valid &= replace_words(targetWords)
+            valid &= targetWords.count(self.unknownToken) == 0  
+
+            if valid:
+                self.trainingSamples.append([inputWords, targetWords]) 
+
+        self.idCount.clear()  
+
 
