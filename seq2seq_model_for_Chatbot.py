@@ -51,6 +51,6 @@ class Seq2SeqModel(object):
       single_cell = tf.nn.rnn_cell.BasicLSTMCell(size)
     cell = single_cell
     cell = tf.nn.rnn_cell.DropoutWrapper(cell, output_keep_prob=0.5)
-    if num_layers > 1:
+    if num_layers > 1:  #case num of layers more it depends on length of sentence in the bucket
       cell = tf.nn.rnn_cell.MultiRNNCell([single_cell] * num_layers)
       
