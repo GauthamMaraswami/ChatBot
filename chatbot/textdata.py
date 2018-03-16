@@ -305,4 +305,77 @@ class TextData:
 
         self.idCount.clear()  
 
+    def createFullCorpus(self, conversations):
+
+        self.padToken = self.getWordId('<pad>')  
+        self.goToken = self.getWordId('<go>') 
+        self.eosToken = self.getWordId('<eos>')  
+        self.unknownToken = self.getWordId('<unknown>') 
+
+
+        for conversation in tqdm(conversations, desc='Extract conversations'):
+            self.extractConversation(conversation)
+
+    def extractConversation(self, conversation):
+        if self.args.skipLines: 
+            step = 2
+        else:
+            step = 1
+
+        for i in tqdm_wrap(
+            range(0, len(conversation['lines']) - 1, step),  # We ignore the last line (no answer for it)
+            desc='Conversation',
+            leave=False
+        ):
+            inputLine  = conversation['lines'][i]
+            targetLine = conversation['lines'][i+1]
+
+            inputWords  = self.extractText(inputLine['text'])
+            targetWords = self.extractText(targetLine['text'])
+
+            if inputWords and targetWords:  
+                self.trainingSamples.append([inputWords, targetWords])
+
+    def extractText(self, line):
+
+        sentences = [] 
+        sentencesToken = nltk.sent_tokenize(line)
+
+        for i in range(len(sentencesToken)):
+            tokens = nltk.word_tokenize(sentencesToken[i])
+
+            tempWords = []
+            for token in tokens:
+                tempWords.append(self.getWordId(token)) 
+
+            sentences.append(tempWords)
+
+        return sentences
+
+    def getWordId(self, word, create=True):
+
+        word = word.lower()  
+        if not create:
+            wordId = self.word2id.get(word, self.unknownToken)
+        elif word in self.word2id:
+            wordId = self.word2id[word]
+            self.idCount[wordId] += 1
+        else:
+            wordId = len(self.word2id)
+            self.word2id[word] = wordId
+            self.id2word[wordId] = word
+            self.idCount[wordId] = 1
+
+        return wordId
+
+    def printBatch(self, batch):
+
+        print('----- Print batch -----')
+        for i in range(len(batch.encoderSeqs[0])):  # Batch size
+            print('Encoder: {}'.format(self.batchSeq2str(batch.encoderSeqs, seqId=i)))
+            print('Decoder: {}'.format(self.batchSeq2str(batch.decoderSeqs, seqId=i)))
+            print('Targets: {}'.format(self.batchSeq2str(batch.targetSeqs, seqId=i)))
+            print('Weights: {}'.format(' '.join([str(weight) for weight in [batchWeight[i] for batchWeight in batch.weights]])))
+
+
 
