@@ -3,7 +3,8 @@ Creating a chatbot as a part of the ITA Course
 
 # Project Team Members: -
 Harshith Kumar 15CO120
-Gautham M 15CO118 
+Gautham M 15CO118
+Soham Ghosh 15MT35
 
 # Project Name: Simple  Chabot
 Language Intended to use Python 
@@ -27,11 +28,11 @@ Stage 3: Using Algorithms to Improve the Speed, Expandability and Robustness of 
 Stage 4: Expanding the Data set to make it more Interactive
 
 # Work Distribution:
-Stage                                 Gautham                                      Harshith
-    • 1                                     Learning NLP                                Learning Ml
-    • 2                                     Partial implications                     Partial implications
-    • 3                                     NLP split algorithm                     Clustering Algorithms
-    • 4                                     Test    Dataset                              Train Dataset
+Stage                                 Gautham                                      Harshith                      Soham
+    • 1                             Learning NLP                                 Learning ML                   Learning ML
+    • 2                             Partial implications                     Partial implications       Partial Implications
+    • 3                             NLP split algorithm                     Clustering Algorithms       NLP Split Algorithm
+    • 4                             Test    Dataset                              Train Dataset               Test Dataset
 
 # Input Output
 Q:How re you? 
