@@ -53,4 +53,25 @@ class Seq2SeqModel(object):
     cell = tf.nn.rnn_cell.DropoutWrapper(cell, output_keep_prob=0.5)
     if num_layers > 1:  #case num of layers more it depends on length of sentence in the bucket
       cell = tf.nn.rnn_cell.MultiRNNCell([single_cell] * num_layers)
-      
+# The seq2seq function: we use embedding for the input and attention.
+    def seq2seq_f(encoder_inputs, decoder_inputs, do_decode):
+      return tf.nn.seq2seq.embedding_attention_seq2seq(
+          encoder_inputs, decoder_inputs, cell,
+          num_encoder_symbols=source_vocab_size,
+          num_decoder_symbols=target_vocab_size,
+          embedding_size=size,
+          output_projection=output_projection,
+          feed_previous=do_decode)
+
+    # Feeds for inputs.
+    self.encoder_inputs = []
+    self.decoder_inputs = []
+    self.target_weights = []
+      for i in xrange(buckets[-1][0]):  # Last bucket is the biggest one.
+      self.encoder_inputs.append(tf.placeholder(tf.int32, shape=[None],
+                                                name="encoder{0}".format(i)))
+    for i in xrange(buckets[-1][1] + 1):
+      self.decoder_inputs.append(tf.placeholder(tf.int32, shape=[None],
+                                                name="decoder{0}".format(i)))
+      self.target_weights.append(tf.placeholder(tf.float32, shape=[None],
+name="weight{0}".format(i)))
