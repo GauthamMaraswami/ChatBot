@@ -75,3 +75,27 @@ class Seq2SeqModel(object):
                                                 name="decoder{0}".format(i)))
       self.target_weights.append(tf.placeholder(tf.float32, shape=[None],
 name="weight{0}".format(i)))
+
+# Our targets are decoder inputs shifted by one.
+    targets = [self.decoder_inputs[i + 1]
+               for i in xrange(len(self.decoder_inputs) - 1)]
+
+    # Training outputs and losses.
+    if forward_only:
+      self.outputs, self.losses = tf.nn.seq2seq.model_with_buckets(
+          self.encoder_inputs, self.decoder_inputs, targets,
+          self.target_weights, buckets, lambda x, y: seq2seq_f(x, y, True),
+          softmax_loss_function=softmax_loss_function)
+      # If we use output projection, we need to project outputs for decoding.
+      if output_projection is not None:
+        for b in xrange(len(buckets)):
+          self.outputs[b] = [
+              tf.matmul(output, output_projection[0]) + output_projection[1]
+              for output in self.outputs[b]
+          ]
+    else:
+      self.outputs, self.losses = tf.nn.seq2seq.model_with_buckets(
+          self.encoder_inputs, self.decoder_inputs, targets,
+          self.target_weights, buckets,
+          lambda x, y: seq2seq_f(x, y, False),
+          softmax_loss_function=softmax_loss_function)
