@@ -377,5 +377,67 @@ class TextData:
             print('Targets: {}'.format(self.batchSeq2str(batch.targetSeqs, seqId=i)))
             print('Weights: {}'.format(' '.join([str(weight) for weight in [batchWeight[i] for batchWeight in batch.weights]])))
 
+    def sequence2str(self, sequence, clean=False, reverse=False):
+
+        if not sequence:
+            return ''
+
+        if not clean:
+            return ' '.join([self.id2word[idx] for idx in sequence])
+
+        sentence = []
+        for wordId in sequence:
+            if wordId == self.eosToken:  # End of generated sentence
+                break
+            elif wordId != self.padToken and wordId != self.goToken:
+                sentence.append(self.id2word[wordId])
+
+        if reverse:  # Reverse means input so no <eos> (otherwise pb with previous early stop)
+            sentence.reverse()
+
+        return self.detokenize(sentence)
+
+    def detokenize(self, tokens):
+
+        return ''.join([
+            ' ' + t if not t.startswith('\'') and
+                       t not in string.punctuation
+                    else t
+            for t in tokens]).strip().capitalize()
+
+    def batchSeq2str(self, batchSeq, seqId=0, **kwargs):
+
+        sequence = []
+        for i in range(len(batchSeq)):  # Sequence length
+            sequence.append(batchSeq[i][seqId])
+        return self.sequence2str(sequence, **kwargs)
+
+    def sentence2enco(self, sentence):
+
+
+        if sentence == '':
+            return None
+
+        tokens = nltk.word_tokenize(sentence)
+        if len(tokens) > self.args.maxLength:
+            return None
+
+
+        wordIds = []
+        for token in tokens:
+            wordIds.append(self.getWordId(token, create=False)) 
+
+        batch = self._createBatch([[wordIds, []]])  
+
+        return batch
+
+    def deco2sentence(self, decoderOutputs):
+
+        sequence = []
+
+        for out in decoderOutputs:
+            sequence.append(np.argmax(out))  
+
+        return sequence  
 
 
