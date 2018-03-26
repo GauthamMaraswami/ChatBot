@@ -116,4 +116,24 @@ name="weight{0}".format(i)))
     self.saver = tf.train.Saver(tf.global_variables())
 
   def step(self, session, encoder_inputs, decoder_inputs, target_weights,
-bucket_id, forward_only):
+bucket_id, forward_only)
+ # Check if the sizes match.
+    encoder_size, decoder_size = self.buckets[bucket_id]
+    if len(encoder_inputs) != encoder_size:
+      raise ValueError("Encoder length must be equal to the one in bucket,"
+                       " %d != %d." % (len(encoder_inputs), encoder_size))
+    if len(decoder_inputs) != decoder_size:
+      raise ValueError("Decoder length must be equal to the one in bucket,"
+                       " %d != %d." % (len(decoder_inputs), decoder_size))
+    if len(target_weights) != decoder_size:
+      raise ValueError("Weights length must be equal to the one in bucket,"
+                       " %d != %d." % (len(target_weights), decoder_size))
+
+    # Input feed: encoder inputs, decoder inputs, target_weights, as provided.
+    input_feed = {}
+    for l in xrange(encoder_size):
+      input_feed[self.encoder_inputs[l].name] = encoder_inputs[l]
+    for l in xrange(decoder_size):
+      input_feed[self.decoder_inputs[l].name] = decoder_inputs[l]
+      input_feed[self.target_weights[l].name] = target_weights[l]
+
