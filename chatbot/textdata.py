@@ -440,4 +440,19 @@ class TextData:
 
         return sequence  
 
+    def playDataset(self):
 
+        print('Randomly play samples:')
+        for i in range(self.args.playDataset):
+            idSample = random.randint(0, len(self.trainingSamples) - 1)
+            print('Q: {}'.format(self.sequence2str(self.trainingSamples[idSample][0], clean=True)))
+            print('A: {}'.format(self.sequence2str(self.trainingSamples[idSample][1], clean=True)))
+            print()
+        pass
+
+
+def tqdm_wrap(iterable, *args, **kwargs):
+
+    if len(iterable) > 100:
+        return tqdm(iterable, *args, **kwargs)
+    return iterable
