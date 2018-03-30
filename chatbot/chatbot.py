@@ -186,3 +186,131 @@ class Chatbot:
             self.sess.close()
             print("The End! Thanks for using this program")
 
+    def mainTrain(self, sess):
+
+        self.textData.makeLighter(self.args.ratioDataset)  # Limit the number of training samples
+
+        mergedSummaries = tf.summary.merge_all()  
+        if self.globStep == 0:  
+            self.writer.add_graph(sess.graph)  
+
+
+        print('Start training (press Ctrl+C to save and exit)...')
+
+        try: 
+            for e in range(self.args.numEpochs):
+
+                print()
+                print("----- Epoch {}/{} ; (lr={}) -----".format(e+1, self.args.numEpochs, self.args.learningRate))
+
+                batches = self.textData.getBatches()
+
+                tic = datetime.datetime.now()
+                for nextBatch in tqdm(batches, desc="Training"):
+                    # Training pass
+                    ops, feedDict = self.model.step(nextBatch)
+                    assert len(ops) == 2  # training, loss
+                    _, loss, summary = sess.run(ops + (mergedSummaries,), feedDict)
+                    self.writer.add_summary(summary, self.globStep)
+                    self.globStep += 1
+
+                    # Output training status
+                    if self.globStep % 100 == 0:
+                        perplexity = math.exp(float(loss)) if loss < 300 else float("inf")
+                        tqdm.write("----- Step %d -- Loss %.2f -- Perplexity %.2f" % (self.globStep, loss, perplexity))
+
+                    # Checkpoint
+                    if self.globStep % self.args.saveEvery == 0:
+                        self._saveSession(sess)
+
+                toc = datetime.datetime.now()
+
+                print("Epoch finished in {}".format(toc-tic))  
+        except (KeyboardInterrupt, SystemExit):  # If the user press Ctrl+C while testing progress
+            print('Interruption detected, exiting the program...')
+
+        self._saveSession(sess)  # Ultimate saving before complete exit
+
+    def predictTestset(self, sess):
+
+        with open(os.path.join(self.args.rootDir, self.TEST_IN_NAME), 'r') as f:
+            lines = f.readlines()
+
+        modelList = self._getModelList()
+        if not modelList:
+            print('Warning: No model found in \'{}\'. Please train a model before trying to predict'.format(self.modelDir))
+            return
+
+        for modelName in sorted(modelList):  
+            print('Restoring previous model from {}'.format(modelName))
+            self.saver.restore(sess, modelName)
+            print('Testing...')
+
+            saveName = modelName[:-len(self.MODEL_EXT)] + self.TEST_OUT_SUFFIX 
+            with open(saveName, 'w') as f:
+                nbIgnored = 0
+                for line in tqdm(lines, desc='Sentences'):
+                    question = line[:-1]  
+
+                    answer = self.singlePredict(question)
+                    if not answer:
+                        nbIgnored += 1
+                        continue  
+
+                    predString = '{x[0]}{0}\n{x[1]}{1}\n\n'.format(question, self.textData.sequence2str(answer, clean=True), x=self.SENTENCES_PREFIX)
+                    if self.args.verbose:
+                        tqdm.write(predString)
+                    f.write(predString)
+                print('Prediction finished, {}/{} sentences ignored (too long)'.format(nbIgnored, len(lines)))
+
+    def mainTestInteractive(self, sess):
+
+        print('Testing: Launch interactive mode:')
+        print('')
+        print('Welcome to the interactive mode, here you can ask to Deep Q&A the sentence you want. Don\'t have high '
+              'expectation. Type \'exit\' or just press ENTER to quit the program. Have fun.')
+
+        while True:
+            question = input(self.SENTENCES_PREFIX[0])
+            if question == '' or question == 'exit':
+                break
+
+            questionSeq = []  # Will be contain the question as seen by the encoder
+            answer = self.singlePredict(question, questionSeq)
+            if not answer:
+                print('Warning: sentence too long, sorry. Maybe try a simpler sentence.')
+                continue  # Back to the beginning, try again
+
+            print('{}{}'.format(self.SENTENCES_PREFIX[1], self.textData.sequence2str(answer, clean=True)))
+
+            if self.args.verbose:
+                print(self.textData.batchSeq2str(questionSeq, clean=True, reverse=True))
+                print(self.textData.sequence2str(answer))
+
+            print()
+
+    def singlePredict(self, question, questionSeq=None):
+        batch = self.textData.sentence2enco(question)
+        if not batch:
+            return None
+        if questionSeq is not None:  
+            questionSeq.extend(batch.encoderSeqs)
+
+        ops, feedDict = self.model.step(batch)
+        output = self.sess.run(ops[0], feedDict) 
+        answer = self.textData.deco2sentence(output)
+
+        return answer
+
+    def daemonPredict(self, sentence):
+        return self.textData.sequence2str(
+            self.singlePredict(sentence),
+            clean=True
+        )
+
+    def daemonClose(self):
+
+        print('Exiting the daemon mode...')
+        self.sess.close()
+        print('Daemon closed.')
+
