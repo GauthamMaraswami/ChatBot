@@ -314,3 +314,217 @@ class Chatbot:
         self.sess.close()
         print('Daemon closed.')
 
+    def loadEmbedding(self, sess):
+
+        with tf.variable_scope("embedding_rnn_seq2seq/rnn/embedding_wrapper", reuse=True):
+            em_in = tf.get_variable("embedding")
+        with tf.variable_scope("embedding_rnn_seq2seq/embedding_rnn_decoder", reuse=True):
+            em_out = tf.get_variable("embedding")
+
+        variables = tf.get_collection_ref(tf.GraphKeys.TRAINABLE_VARIABLES)
+        variables.remove(em_in)
+        variables.remove(em_out)
+
+        if self.globStep != 0:
+            return
+
+        embeddings_path = os.path.join(self.args.rootDir, 'data', 'embeddings', self.args.embeddingSource)
+        embeddings_format = os.path.splitext(embeddings_path)[1][1:]
+        print("Loading pre-trained word embeddings from %s " % embeddings_path)
+        with open(embeddings_path, "rb") as f:
+            header = f.readline()
+            vocab_size, vector_size = map(int, header.split())
+            binary_len = np.dtype('float32').itemsize * vector_size
+            initW = np.random.uniform(-0.25,0.25,(len(self.textData.word2id), vector_size))
+            for line in tqdm(range(vocab_size)):
+                word = []
+                while True:
+                    ch = f.read(1)
+                    if ch == b' ':
+                        word = b''.join(word).decode('utf-8')
+                        break
+                    if ch != b'\n':
+                        word.append(ch)
+                if word in self.textData.word2id:
+                    if embeddings_format == 'bin':
+                        vector = np.fromstring(f.read(binary_len), dtype='float32')
+                    elif embeddings_format == 'vec':
+                        vector = np.fromstring(f.readline(), sep=' ', dtype='float32')
+                    else:
+                        raise Exception("Unkown format for embeddings: %s " % embeddings_format)
+                    initW[self.textData.word2id[word]] = vector
+                else:
+                    if embeddings_format == 'bin':
+                        f.read(binary_len)
+                    elif embeddings_format == 'vec':
+                        f.readline()
+                    else:
+                        raise Exception("Unkown format for embeddings: %s " % embeddings_format)
+
+        if self.args.embeddingSize < vector_size:
+            U, s, Vt = np.linalg.svd(initW, full_matrices=False)
+            S = np.zeros((vector_size, vector_size), dtype=complex)
+            S[:vector_size, :vector_size] = np.diag(s)
+            initW = np.dot(U[:, :self.args.embeddingSize], S[:self.args.embeddingSize, :self.args.embeddingSize])
+
+        sess.run(em_in.assign(initW))
+        sess.run(em_out.assign(initW))
+
+
+    def managePreviousModel(self, sess):
+
+        print('WARNING: ', end='')
+
+        modelName = self._getModelName()
+
+        if os.listdir(self.modelDir):
+            if self.args.reset:
+                print('Reset: Destroying previous model at {}'.format(self.modelDir))
+            # Analysing directory content
+            elif os.path.exists(modelName):  # Restore the model
+                print('Restoring previous model from {}'.format(modelName))
+                self.saver.restore(sess, modelName)  
+            elif self._getModelList():
+                print('Conflict with previous models.')
+                raise RuntimeError('Some models are already present in \'{}\'. You should check them first (or re-try with the keepAll flag)'.format(self.modelDir))
+            else: 
+                print('No previous model found, but some files found at {}. Cleaning...'.format(self.modelDir)) 
+                self.args.reset = True
+
+            if self.args.reset:
+                fileList = [os.path.join(self.modelDir, f) for f in os.listdir(self.modelDir)]
+                for f in fileList:
+                    print('Removing {}'.format(f))
+                    os.remove(f)
+
+        else:
+            print('No previous model found, starting from clean directory: {}'.format(self.modelDir))
+
+    def _saveSession(self, sess):
+
+        tqdm.write('Checkpoint reached: saving model (don\'t stop the run)...')
+        self.saveModelParams()
+        model_name = self._getModelName()
+        with open(model_name, 'w') as f:  
+            f.write('This file is used internally by DeepQA to check the model existance. Please do not remove.\n')
+        self.saver.save(sess, model_name) 
+        tqdm.write('Model saved.')
+
+    def _getModelList(self):
+        return [os.path.join(self.modelDir, f) for f in os.listdir(self.modelDir) if f.endswith(self.MODEL_EXT)]
+
+    def loadModelParams(self):
+
+        self.modelDir = os.path.join(self.args.rootDir, self.MODEL_DIR_BASE)
+        if self.args.modelTag:
+            self.modelDir += '-' + self.args.modelTag
+
+        configName = os.path.join(self.modelDir, self.CONFIG_FILENAME)
+        if not self.args.reset and not self.args.createDataset and os.path.exists(configName):
+
+            config = configparser.ConfigParser()
+            config.read(configName)
+
+            currentVersion = config['General'].get('version')
+            if currentVersion != self.CONFIG_VERSION:
+                raise UserWarning('Present configuration version {0} does not match {1}. You can try manual changes on \'{2}\''.format(currentVersion, self.CONFIG_VERSION, configName))
+
+            self.globStep = config['General'].getint('globStep')
+            self.args.watsonMode = config['General'].getboolean('watsonMode')
+            self.args.autoEncode = config['General'].getboolean('autoEncode')
+            self.args.corpus = config['General'].get('corpus')
+
+            self.args.datasetTag = config['Dataset'].get('datasetTag')
+            self.args.maxLength = config['Dataset'].getint('maxLength')  
+            self.args.filterVocab = config['Dataset'].getint('filterVocab')
+            self.args.skipLines = config['Dataset'].getboolean('skipLines')
+            self.args.vocabularySize = config['Dataset'].getint('vocabularySize')
+
+            self.args.hiddenSize = config['Network'].getint('hiddenSize')
+            self.args.numLayers = config['Network'].getint('numLayers')
+            self.args.softmaxSamples = config['Network'].getint('softmaxSamples')
+            self.args.initEmbeddings = config['Network'].getboolean('initEmbeddings')
+            self.args.embeddingSize = config['Network'].getint('embeddingSize')
+            self.args.embeddingSource = config['Network'].get('embeddingSource')
+
+            print()
+            print('Warning: Restoring parameters:')
+            print('globStep: {}'.format(self.globStep))
+            print('watsonMode: {}'.format(self.args.watsonMode))
+            print('autoEncode: {}'.format(self.args.autoEncode))
+            print('corpus: {}'.format(self.args.corpus))
+            print('datasetTag: {}'.format(self.args.datasetTag))
+            print('maxLength: {}'.format(self.args.maxLength))
+            print('filterVocab: {}'.format(self.args.filterVocab))
+            print('skipLines: {}'.format(self.args.skipLines))
+            print('vocabularySize: {}'.format(self.args.vocabularySize))
+            print('hiddenSize: {}'.format(self.args.hiddenSize))
+            print('numLayers: {}'.format(self.args.numLayers))
+            print('softmaxSamples: {}'.format(self.args.softmaxSamples))
+            print('initEmbeddings: {}'.format(self.args.initEmbeddings))
+            print('embeddingSize: {}'.format(self.args.embeddingSize))
+            print('embeddingSource: {}'.format(self.args.embeddingSource))
+            print()
+
+        self.args.maxLengthEnco = self.args.maxLength
+        self.args.maxLengthDeco = self.args.maxLength + 2
+
+        if self.args.watsonMode:
+            self.SENTENCES_PREFIX.reverse()
+
+
+    def saveModelParams(self):
+        config = configparser.ConfigParser()
+        config['General'] = {}
+        config['General']['version']  = self.CONFIG_VERSION
+        config['General']['globStep']  = str(self.globStep)
+        config['General']['watsonMode'] = str(self.args.watsonMode)
+        config['General']['autoEncode'] = str(self.args.autoEncode)
+        config['General']['corpus'] = str(self.args.corpus)
+
+        config['Dataset'] = {}
+        config['Dataset']['datasetTag'] = str(self.args.datasetTag)
+        config['Dataset']['maxLength'] = str(self.args.maxLength)
+        config['Dataset']['filterVocab'] = str(self.args.filterVocab)
+        config['Dataset']['skipLines'] = str(self.args.skipLines)
+        config['Dataset']['vocabularySize'] = str(self.args.vocabularySize)
+
+        config['Network'] = {}
+        config['Network']['hiddenSize'] = str(self.args.hiddenSize)
+        config['Network']['numLayers'] = str(self.args.numLayers)
+        config['Network']['softmaxSamples'] = str(self.args.softmaxSamples)
+        config['Network']['initEmbeddings'] = str(self.args.initEmbeddings)
+        config['Network']['embeddingSize'] = str(self.args.embeddingSize)
+        config['Network']['embeddingSource'] = str(self.args.embeddingSource)
+
+        # Keep track of the learning params (but without restoring them)
+        config['Training (won\'t be restored)'] = {}
+        config['Training (won\'t be restored)']['learningRate'] = str(self.args.learningRate)
+        config['Training (won\'t be restored)']['batchSize'] = str(self.args.batchSize)
+        config['Training (won\'t be restored)']['dropout'] = str(self.args.dropout)
+
+        with open(os.path.join(self.modelDir, self.CONFIG_FILENAME), 'w') as configFile:
+            config.write(configFile)
+
+    def _getSummaryName(self):
+
+        return self.modelDir
+
+    def _getModelName(self):
+
+        modelName = os.path.join(self.modelDir, self.MODEL_NAME_BASE)
+        if self.args.keepAll:  # We do not erase the previously saved model by including the current step on the name
+            modelName += '-' + str(self.globStep)
+        return modelName + self.MODEL_EXT
+
+    def getDevice(self):
+
+        if self.args.device == 'cpu':
+            return '/cpu:0'
+        elif self.args.device == 'gpu':
+            return '/gpu:0'
+        elif self.args.device is None:  # No specified device (default)
+            return None
+        else:
+            print('Warning: Error in the device name: {}, use the default device'.format(self.args.device))
+            return None
