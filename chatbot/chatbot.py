@@ -55,7 +55,7 @@ class Chatbot:
         self.loadModelParams()  
         self.textData = TextData(self.args)
         if self.args.createDataset:
-            
+            return
         with tf.device(self.getDevice()):
             self.model = Model(self.args, self.textData)
 
