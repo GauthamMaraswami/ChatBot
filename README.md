@@ -4,6 +4,7 @@ Creating a chatbot as a part of the ITA Course
 # Project Team Members: -
 Harshith Kumar 15CO120
 Gautham M 15CO118 
+Soham Ghosh 15MT35
 
 # Project Name: Simple  Chabot
 Language Intended to use Python 
