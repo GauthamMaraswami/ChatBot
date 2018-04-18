@@ -1,17 +1,4 @@
-# Copyright 2017 Google Inc. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ==============================================================================
+
 """Attention-based sequence-to-sequence model with dynamic RNN support."""
 from __future__ import absolute_import
 from __future__ import division
@@ -181,3 +168,26 @@ def _create_attention_images_summary(final_context_state):
   attention_images *= 255
   attention_summary = tf.summary.image("attention_images", attention_images)
   return attention_summary
+
+   # The seq2seq function: we use embedding for the input and attention.
+ def seq2seq_f(encoder_inputs, decoder_inputs, do_decode):
+      return tf.nn.seq2seq.embedding_attention_seq2seq(
+          encoder_inputs, decoder_inputs, cell,
+          num_encoder_symbols=source_vocab_size,
+          num_decoder_symbols=target_vocab_size,
+          embedding_size=size,
+          output_projection=output_projection,
+          feed_previous=do_decode)
+
+    # Feeds for inputs.
+    self.encoder_inputs = []
+    self.decoder_inputs = []
+    self.target_weights = []
+    for i in xrange(buckets[-1][0]):  # Last bucket is the biggest one.
+      self.encoder_inputs.append(tf.placeholder(tf.int32, shape=[None],
+                                                name="encoder{0}".format(i)))
+    for i in xrange(buckets[-1][1] + 1):
+      self.decoder_inputs.append(tf.placeholder(tf.int32, shape=[None],
+                                                name="decoder{0}".format(i)))
+      self.target_weights.append(tf.placeholder(tf.float32, shape=[None],
+name="weight{0}".format(i)))
